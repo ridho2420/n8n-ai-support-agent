@@ -1,0 +1,1685 @@
+{
+  "name": "Saltgrove – Support Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Workflow B – Support agent (chat + email)\nA customer chats or emails Saltgrove Skin. AI sorts the message, code decides the route, the agent answers from the help documents and order data. Anything the agent passes on becomes an Airtable ticket and a Slack alert, and the conversation keeps going. Every message is logged.\n\n**1. Intake** → **2. Triage** → **3. Answer** → **4. Plan ticket** → **5. Ticket & alert** → **6. Log, alerts & reply**\n\nOne conversation (chat session or email thread) = one ticket. Emails get a reply in the same thread.\n\nIf a person from the team has already replied in an email thread, the bot stays quiet and tells the team. Problems are reported in Slack: a customer left without a reply goes to #support-escalations, anything else to #automation-errors. Crashes are caught by the Error workflow \"Saltgrove – Error Alerts\".\n\nTested with 23 fixed test cases by \"Saltgrove – Eval Runner\" (results in the data table eval_results, summary in #eval-runs).",
+        "height": 460,
+        "width": 1340,
+        "color": 7
+      },
+      "id": "612ade6b-1102-4678-91eb-ee8aced5049a",
+      "name": "Sticky – Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -768
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. Intake\nChat message or email in (one email per minute). For email, code reads the sender, removes quoted replies and skips our own, no-reply and auto-reply emails. Then it reads the Gmail thread: a sent message without the label \"AI reply\" means a person from the team has already replied. Order number and email are taken with fixed patterns.\n\nBottom row: test cases from \"Saltgrove – Eval Runner\" come in here and go through the same triage and agent.",
+        "height": 880,
+        "width": 1340,
+        "color": 5
+      },
+      "id": "0201fc8c-ad6e-4b34-b63d-3ad5dcec3d82",
+      "name": "Sticky – Intake",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2. Triage\nAI sorts the message (category, urgency, topic, sensitive). Code decides the route: spam (logged, never reaches the agent), human (a person is handling the email thread: the agent is skipped, nothing is sent), answer, or pass to the Customer Care team.",
+        "height": 880,
+        "width": 780,
+        "color": 3
+      },
+      "id": "91fc733e-40a3-4d71-8458-db0f489dd3d4",
+      "name": "Sticky – Triage",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3. Answer\nAgent searches the help documents, checks orders (number + email must match) and remembers the conversation.",
+        "height": 880,
+        "width": 640,
+        "color": 4
+      },
+      "id": "c7136ba1-621e-4563-8e17-61df0c32dceb",
+      "name": "Sticky – Answer",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 4. Plan ticket\nReads the [[HANDOFF:…]] marker and removes it from the reply. Looks up this conversation (earlier email, order, existing ticket) and decides: new ticket, update the ticket, or nothing.\n\n**Eval Run?** A test case stops here and goes back to the Eval Runner: no ticket, Slack, email or log.",
+        "height": 880,
+        "width": 1144,
+        "color": 6
+      },
+      "id": "974e1831-56ad-4df0-aba6-413c9fd52c23",
+      "name": "Sticky – Plan",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2752,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 5. Ticket & alert\nOne ticket per conversation. Checks whether the customer has other open tickets, creates or updates the Airtable ticket, and posts to #support-escalations (URGENT first). Follow-up messages update the ticket quietly.",
+        "height": 880,
+        "width": 1580,
+        "color": 2
+      },
+      "id": "2e1f0827-f7bb-485e-ba68-0cbd8a6daeb5",
+      "name": "Sticky – Ticket",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3904,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 6. Log, alerts & reply\nLogs the message (with its ticket) to Supabase. Reports problems the workflow caught: a customer left without a reply goes to #support-escalations, anything else to #automation-errors. Then replies in the chat or in the same email thread; every bot email gets the Gmail label \"AI reply\". Spam, failed answers and threads a person is handling get no email.",
+        "height": 880,
+        "width": 2460,
+        "color": 5
+      },
+      "id": "34290143-59da-47ca-9879-5b16f8855aa6",
+      "name": "Sticky – Log",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5504,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "0ced1544-952a-494e-9ca8-2fbef3e483c4",
+      "name": "Chat Message",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        -144
+      ],
+      "webhookId": "3c0c1c99-3afe-46c2-bdd8-3f9dd2d81b1f"
+    },
+    {
+      "parameters": {
+        "jsCode": "// One clean record per chat message.\n// Order number and email are taken with fixed patterns, not by the AI.\nconst j = $input.first().json;\nconst message = String(j.chatInput ?? '').trim();\nconst orderMatch = message.match(/\\bSG-?(\\d{5})\\b/i);\nconst emailMatch = message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);\n\nreturn [{\n  json: {\n    channel: 'chat',\n    session_id: 'chat:' + (j.sessionId || $execution.id),\n    message,\n    customer_name: null,\n    customer_first_name: null,\n    customer_email: emailMatch ? emailMatch[0].toLowerCase() : null,\n    order_number: orderMatch ? 'SG-' + orderMatch[1] : null,\n    attachment_names: [],\n  },\n}];"
+      },
+      "id": "95a166a1-cb9e-4294-af75-6180b820c503",
+      "name": "Read Chat",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "maxResults": 1,
+        "filters": {
+          "labelIds": [
+            "INBOX"
+          ],
+          "q": "in:inbox -from:me",
+          "readStatus": "both"
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "id": "27192b3a-3010-4ef8-838d-46502170ca08",
+      "name": "Gmail: New Email",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One clean record per customer email. Code, not AI, decides who the customer is:\n// the sender's address is the customer's email.\n// Your support inbox: the Gmail account the trigger reads. The bot never answers its own emails.\nconst SUPPORT_ADDRESS = 'support@example.com';\nconst j = $input.first().json;\n\nfunction sender(j) {\n  const v = j.from && j.from.value && j.from.value[0];\n  if (v && v.address) return { address: v.address, name: v.name || '' };\n  const raw = String((j.from && j.from.text) || j.From || j.from || '');\n  const m = raw.match(/^\\s*\"?([^\"<]*?)\"?\\s*<([^>]+)>/);\n  if (m) return { address: m[2], name: m[1].trim() };\n  const e = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);\n  return { address: e ? e[0] : '', name: '' };\n}\n\nfunction header(name) {\n  const h = j.headers || {};\n  const key = Object.keys(h).find(k => k.toLowerCase() === name);\n  return key ? String(h[key]).replace(new RegExp('^' + name + ':\\\\s*', 'i'), '').trim() : '';\n}\n\n// Keep only the new part of the email: drop quoted history and lines starting with \">\".\nfunction newPart(text) {\n  let t = String(text || '').replace(/\\r\\n/g, '\\n');\n  const cut = t.search(/^\\s*(On [\\s\\S]{0,300}?wrote:\\s*$|-{2,}\\s*Original Message\\s*-{2,}|From: .+\\nSent: )/im);\n  if (cut > 0) t = t.slice(0, cut);\n  t = t.split('\\n').filter(line => !/^\\s*>/.test(line)).join('\\n');\n  return t.replace(/\\n{3,}/g, '\\n\\n').trim().slice(0, 3000);\n}\n\nconst from = sender(j);\nconst address = from.address.toLowerCase();\nconst subject = String(j.subject || j.Subject || '').trim();\nconst html = String(j.html || '');\nconst plain = j.text || html.replace(/<style[\\s\\S]*?<\\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/[ \\t]+/g, ' ');\nconst body = newPart(plain) || String(j.snippet || '').trim();\nconst text = subject + '\\n' + body;\n\n// Never answer ourselves, no-reply senders, bounces or automatic replies.\nlet skipReason = null;\nif (!address) skipReason = 'no sender address';\nelse if (address === SUPPORT_ADDRESS) skipReason = 'sent by Saltgrove';\nelse if (/^(no-?reply|do-?not-?reply|notifications?|mailer-daemon|postmaster|bounces?)[@+._-]/.test(address) || address.includes('noreply')) skipReason = 'no-reply sender';\nelse if (header('auto-submitted') && header('auto-submitted').toLowerCase() !== 'no') skipReason = 'automatic reply';\n\nconst orderMatch = text.match(/\\bSG-?(\\d{5})\\b/i);\n\n// Attachments (photos, receipts) are counted by code so the team is told when they arrive.\nconst files = Object.values($input.first().binary || {}).map(b => b.fileName || 'file');\nconst attachmentNote = files.length ? '\\n\\n[Attachments: ' + files.join(', ') + ']' : '';\n\nreturn [{\n  json: {\n    channel: 'email',\n    session_id: 'email:' + (j.threadId || j.id),\n    message: 'Subject: ' + (subject || '(no subject)') + '\\n\\n' + body + attachmentNote,\n    customer_name: from.name || null,\n    customer_first_name: (from.name || '').trim().split(/\\s+/)[0] || null,\n    attachment_names: files,\n    customer_email: address || null,\n    order_number: orderMatch ? 'SG-' + orderMatch[1] : null,\n    gmail_message_id: j.id,\n    skip: skipReason !== null,\n    skip_reason: skipReason,\n  },\n}];"
+      },
+      "id": "7910866c-4a8f-4f2a-932f-0f8dbbb61954",
+      "name": "Read Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1d2e3f4-0000-4000-8000-000000000015",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "96418261-f353-4a3c-b6c0-d49ca124d176",
+      "name": "Customer Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Shared by chat and email from here on.\n// Is Customer Care open right now (Mon-Fri, 9 am-5 pm Pacific)? If not, when are they back?\n// Code works this out so the agent never guesses. Public holidays are not handled yet.\nconst j = $input.first().json;\nconst pt = $now.setZone('America/Los_Angeles');\nconst isOpen = pt.weekday <= 5 && pt.hour >= 9 && pt.hour < 17;\nlet teamStatus;\nif (isOpen) {\n  teamStatus = 'open now, until 5:00 pm Pacific Time today';\n} else {\n  let next = pt.set({ hour: 9, minute: 0, second: 0, millisecond: 0 });\n  if (pt.hour >= 9) next = next.plus({ days: 1 });\n  while (next.weekday > 5) next = next.plus({ days: 1 });\n  const day = next.toFormat('cccc, LLLL d');\n  teamStatus = 'closed now, back ' + (next.hasSame(pt, 'day') ? 'today (' + day + ')' : day) + ' at 9:00 am Pacific Time';\n}\n\nreturn [{ json: { ...j, team_status: teamStatus, received_at: $now.toISO() } }];"
+      },
+      "id": "2b717459-18f2-485f-b436-b4b9bea39054",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You sort incoming customer messages for Saltgrove Skin, an online skincare store in the US and Canada. Classify the customer message at the end.\n\ncategory:\n- question: asks for information (products, ingredients, routines, shipping, policies, order status, managing the Refill Club)\n- order_change: wants to change or cancel an order that has not shipped, including the address\n- complaint: unhappy that something went wrong but does not ask for money back (late, lost, damaged or wrong item, skin reaction, product not suitable, billing, fees, slow service)\n- refund_request: asks for a refund, a return, or to cancel an order that was already charged. If a message complains AND asks for a refund, choose refund_request. A damaged, leaking or wrong item is a complaint unless the customer asks for a refund or return.\n- other: thanks, feedback, asks to talk to a person, partnership or wholesale offers, anything else\n- spam: unrelated promotions, SEO offers, phishing, mass mail\n\nurgency:\n- urgent: any skin reaction or health symptom; any request to change or cancel an order; a threat of a chargeback, legal action or a public bad review\n- normal: other complaints and refund requests, sensitive questions, other messages that need a person\n- low: ordinary questions, thanks, spam\n\ncomplaint_topic: only for complaint and refund_request, otherwise \"none\". One of: shipping_delay, missing_package, damaged_or_wrong_item, skin_reaction, product_not_suitable, billing_or_subscription, duties_or_fees, service, other\n\nsensitive_topic: true for pregnancy, breastfeeding, a skin condition or illness, prescription medication, or symptoms of a skin reaction. Otherwise false. A skin type (sensitive, dry, oily or combination skin) is not a sensitive topic: \"Is it good for sensitive skin?\" is an ordinary product question.\n\nsummary: one short English sentence describing the request, for the support team.\n\nCustomer message:\n\"\"\"\n{{ $json.message }}\n\"\"\"",
+        "hasOutputParser": true
+      },
+      "id": "2a500b6c-808e-43ca-a9a1-e93d8d9c24ad",
+      "name": "AI: Triage",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        1392,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash-lite",
+        "options": {
+          "temperature": 0
+        }
+      },
+      "id": "e8cf7bcf-01c8-442f-8cdb-208789e1d705",
+      "name": "Gemini – Triage",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"category\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"question\",\n        \"order_change\",\n        \"complaint\",\n        \"refund_request\",\n        \"other\",\n        \"spam\"\n      ]\n    },\n    \"urgency\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"urgent\",\n        \"normal\",\n        \"low\"\n      ]\n    },\n    \"complaint_topic\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"shipping_delay\",\n        \"missing_package\",\n        \"damaged_or_wrong_item\",\n        \"skin_reaction\",\n        \"product_not_suitable\",\n        \"billing_or_subscription\",\n        \"duties_or_fees\",\n        \"service\",\n        \"other\",\n        \"none\"\n      ]\n    },\n    \"sensitive_topic\": {\n      \"type\": \"boolean\"\n    },\n    \"summary\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"category\",\n    \"urgency\",\n    \"complaint_topic\",\n    \"sensitive_topic\",\n    \"summary\"\n  ]\n}"
+      },
+      "id": "ff2e346e-0cad-44b3-8d0f-37b9798fb16e",
+      "name": "Triage Format",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1504,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Code, not AI, decides who handles the message.\nconst base = $('Normalize').first().json;\nconst t = $input.first().json;\nconst o = (t && t.output && typeof t.output === 'object') ? t.output : null;\nconst triageFailed = !o || !o.category;\n\nconst category = triageFailed ? 'other' : o.category;\nconst urgency = triageFailed ? 'normal' : (o.urgency || 'normal');\nconst complaintTopic = ['complaint', 'refund_request'].includes(category)\n  ? (o && o.complaint_topic && o.complaint_topic !== 'none' ? o.complaint_topic : 'other')\n  : 'none';\nconst sensitive = !triageFailed && o.sensitive_topic === true;\n\n// Spam is logged but never reaches the agent.\n// First matching reason wins: urgent, sensitive_topic, order_change, refund_request, complaint.\nconst isSpam = category === 'spam';\n// A person from the team already replied in this email thread: the agent is skipped and nothing is sent.\n// Triage still runs, so an urgent message is still flagged for the team.\nconst human = !isSpam && base.human_takeover === true;\nlet reason = null;\nif (!isSpam) {\n  if (urgency === 'urgent') reason = 'urgent';\n  else if (sensitive) reason = 'sensitive_topic';\n  else if (['order_change', 'refund_request', 'complaint'].includes(category)) reason = category;\n}\n\nlet brief;\nif (reason) {\n  brief = `This message has ALREADY been passed to the Customer Care team (reason: ${reason}${urgency === 'urgent' ? ', urgent' : ''}). `\n    + 'Write a short holding reply that follows HANDING OFF TO THE TEAM. You may search the help documents for steps that apply '\n    + '(for example skin reaction safety steps, or what to send for a damaged item), but promise no outcome. Do not add a handoff marker.'\n    // The team can only reply by email: in chat without an email, the agent must ask for one.\n    + (base.channel !== 'email' && !base.customer_email\n      ? ' This is a chat message without an email address: unless the customer gave one earlier in this conversation, ask for the best email to reach them.'\n      : '');\n} else if (triageFailed) {\n  brief = 'The message could not be sorted automatically. If it is a simple question, answer it from the help documents. '\n    + 'If it is a complaint, a refund or order change, a health or skin issue, or anything you cannot answer from the documents, '\n    + 'write a holding reply and end with [[HANDOFF:not_in_docs]].';\n} else {\n  brief = 'Answer this message. Search the help documents before answering anything about products or policies. '\n    + 'Use lookup_order for order status.';\n}\n\nreturn [{\n  json: {\n    ...base,\n    category,\n    urgency,\n    complaint_topic: complaintTopic,\n    sensitive_topic: sensitive,\n    summary: o && o.summary ? o.summary : '',\n    route_decision: isSpam ? 'spam' : (human ? 'human' : (reason ? 'escalate' : 'answer')),\n    escalation_reason: reason,\n    triage_failed: triageFailed,\n    agent_brief: brief,\n  },\n}];"
+      },
+      "id": "3ab52626-1968-4cda-8298-1d3f4b7e8d5e",
+      "name": "Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1d2e3f4-0000-4000-8000-000000000031",
+              "leftValue": "={{ ['spam', 'human'].includes($json.route_decision) }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "5c04af9e-685b-4d7c-9423-13476483b6f2",
+      "name": "Skip Agent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1904,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "=You are the customer support assistant for Saltgrove Skin, a small skincare brand that sells online to the US and Canada. You are an AI assistant. Never pretend to be human and never say you are asking a colleague. If a customer asks whether they're talking to a person, say honestly that you're Saltgrove's AI assistant.\n\nNow: {{ $now.setZone('America/Los_Angeles').toFormat('cccc, LLLL d, yyyy, h:mm a') }} Pacific Time.\nCustomer Care team: Monday to Friday, 9:00 am to 5:00 pm Pacific Time. They reply by email within 1 business day; skin reaction reports the same business day.\nCustomer Care right now: {{ $json.team_status }}\n\nTOOLS\n- search_help_docs: Saltgrove's help documents. Search them before answering anything about products, ingredients, routines, shipping, returns, refunds, the Refill Club, payments, discounts or policies. Answer only from what they say.\n- lookup_order: order status. It needs BOTH the order number (format SG-12345) and the email address used for the order. If the customer gave only one, ask for the other. If nothing matches, say no order matches those details and reveal nothing else. When you report an order, give its status, the latest tracking event with its date, the carrier and the tracking number. order_placed_at is when the order was placed, not when it shipped; the order data has no ship date.\n\nRULES\n1. Answer only from the help documents and order data. Never invent policies, prices, dates, discounts, programs or product details.\n2. If the help documents don't mention something, you don't know it. Don't say Saltgrove doesn't have it or doesn't offer it; pass the question to the Customer Care team. Only say Saltgrove doesn't offer something when a document says so.\n3. When you explain how to use products, keep the steps and how often exactly as the documents say. Don't make up new schedules.\n   For a skincare routine, search the help documents for the suggested routines and include every step they list, in that order, choosing products for the customer's skin type. One short sentence per step. Keep any limit the documents give on how often a product is used, but leave out other usage tips, so the routine stays within 120 words.\n4. Never approve, refuse or promise a refund, return, replacement or order change. You may explain the policy and what to send (order number, photos of the item and the packing slip).\n5. No medical advice. For pregnancy, breastfeeding, skin conditions or medication, say the Customer Care team will follow up and suggest checking with a doctor.\n6. Skin reactions: always include the safety steps from the help documents: stop using the product, rinse with cool water, and get medical care right away for swelling, blistering or trouble breathing.\n7. Never say you've noted, saved or passed on anything unless it really was passed to the Customer Care team in this conversation.\n8. Reply entirely in the customer's language and translate anything you take from the help documents; never mix languages. Plain text only, no markdown (no bold, headings or bullet symbols). Chat replies stay short: about 80 words, up to 120 for routines. Email replies: start with \"Hi <customer first name>,\" using the first name below (otherwise \"Hi,\"), use short paragraphs, up to about 150 words, and don't add a sign-off or signature; one is added automatically.\n9. Be warm and calm, never defensive.\n\nHANDING OFF TO THE TEAM\nWhen a message is passed to the Customer Care team:\n- Write it as done (\"I've passed your request to our Customer Care team\") and say when they'll reply by email. If the team is closed right now, name the day they're back (for example \"on Monday\") instead of saying \"today\" or \"the same business day\". Don't ask the customer to wait in the chat.\n- Never promise a faster reply than the help documents do (within 1 business day; skin reactions the same business day), even if the customer demands one. Say when the team is back, not that they will reply today or as soon as they return.\n- If the help documents explain the policy behind the issue (for example who pays import duties, delivery times, the return window, or what to send for a damaged item), explain it politely in one or two sentences.\n- When the customer asks to talk to a person, start with yes: a person from the Customer Care team will reply by email. Don't open with what you can't do.\n- In chat, if the customer hasn't given an email address anywhere in this conversation, ask for the best email to reach them. The team can only reply by email, so never skip this. Never ask on email: the sender's address is their email.\n- Offer to help with anything else, and keep answering other questions normally.\n- If you already passed something on earlier in this conversation and the customer now gives an email, thank them and confirm it has been added to their request. Don't hand off the same question twice.\n- If the customer gives an email but nothing was passed on, just thank them and ask how you can help.\n- If the message lists [Attachments: …] in a conversation that was already passed to the team, thank the customer and say the files are now with the Customer Care team.\n\nHANDOFF MARKER\nOnly when YOU decide a message needs the team, end your reply with one marker on its own line:\n[[HANDOFF:not_in_docs]] when the help documents don't answer the question\n[[HANDOFF:asked_for_human]] when the customer asks to talk to a person\nThe marker always goes on the very last line, after any question to the customer. If the brief doesn't say the message is already being passed to the team, a reply that says you've passed it on or that a person will reply must end with a marker: without it, nothing reaches the team.\nNever add a marker when the brief below says the message is already being passed to the team, and never for questions you answered.\n\nTHIS MESSAGE\nChannel: {{ $json.channel }}\nCustomer first name: {{ $json.customer_first_name || 'unknown' }}\nOrder number in this message: {{ $json.order_number || 'none' }}\n{{ $json.channel === 'email' ? 'Customer email (the sender address, use it for lookup_order): ' + $json.customer_email : 'Email in this message: ' + ($json.customer_email || 'none') }}\nBrief: {{ $json.agent_brief }}",
+          "maxIterations": 6
+        }
+      },
+      "id": "b2c054c8-8ead-4ed4-98c0-27c3287a52a5",
+      "name": "Support Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        2192,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash-lite",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "59fff550-088e-4365-9435-2e89a0541bf3",
+      "name": "Gemini – Agent",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        2112,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.session_id }}",
+        "contextWindowLength": 10
+      },
+      "id": "5c17f597-431e-4f60-9d1a-82470fad2c1b",
+      "name": "Conversation Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        2240,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolName": "search_help_docs",
+        "toolDescription": "Search Saltgrove Skin's help documents: products, ingredients, routines, shipping, returns and refunds, Refill Club, payments, discounts and FAQ. Input: a short search query in English.",
+        "tableName": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list",
+          "cachedResultName": "documents"
+        },
+        "options": {
+          "queryName": "match_documents"
+        }
+      },
+      "id": "5feba178-593c-43f4-8767-6cee949b6765",
+      "name": "Help Docs Search",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.1,
+      "position": [
+        2368,
+        224
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "3133fca7-f549-480a-9d75-5bd227dd5bea",
+      "name": "Gemini Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        2432,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Look up one Saltgrove order. Requires both the order number (like SG-10232) and the email address used for the order. Returns nothing if they don't match.",
+        "operation": "executeQuery",
+        "query": "select order_number, status, country, ordered_at as order_placed_at, items, order_total_usd,\n       shipping_method, tracking_number,\n       last_tracking_event as latest_tracking_event, last_tracking_at as latest_tracking_event_at,\n       delivered_at, is_refill_club\nfrom orders\nwhere upper(order_number) = upper($1)\n  and lower(customer_email) = lower($2);",
+        "options": {
+          "queryReplacement": "={{ $fromAI('order_number', 'Order number in the format SG-12345', 'string') }},{{ $fromAI('email', 'Email address the customer used for the order', 'string') }}"
+        }
+      },
+      "id": "16a2678b-d579-4b0d-9f2f-585a7432a35e",
+      "name": "lookup_order",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        2624,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reads the [[HANDOFF:...]] marker, removes it from the reply, and sets the final route.\n// Spam, and emails in a thread a person is handling, arrive straight from \"Skip Agent?\"\n// and never went through the agent.\nconst r = $('Route').first().json;\nconst a = $input.first().json;\n\nif (r.route_decision === 'spam') {\n  return [{\n    json: {\n      ...r,\n      // Chat needs something on screen; spam email gets no reply at all.\n      reply: r.channel === 'chat' ? 'Thanks for reaching out. This chat only helps with Saltgrove Skin orders and products.' : '',\n      route: 'spam',\n      escalation_reason: null,\n      handoff_marker: null,\n      agent_failed: false,\n    },\n  }];\n}\n\nif (r.route_decision === 'human') {\n  return [{\n    json: {\n      ...r,\n      reply: '',\n      route: 'human',\n      handoff_marker: null,\n      agent_failed: false,\n    },\n  }];\n}\n\nconst raw = typeof a.output === 'string' ? a.output : '';\nconst agentFailed = raw.trim() === '';\n\nconst marker = raw.match(/\\[\\[\\s*HANDOFF\\s*:\\s*([a-z_]+)\\s*\\]\\]/i);\nconst markerReason = marker ? marker[1].toLowerCase() : null;\nlet reply = raw.replace(/\\[\\[\\s*HANDOFF\\s*:[^\\]]*\\]\\]/gi, '').trim();\n\nlet route, reason;\nif (r.route_decision === 'escalate') {\n  route = 'escalated'; reason = r.escalation_reason;\n} else if (['not_in_docs', 'asked_for_human'].includes(markerReason)) {\n  route = 'escalated'; reason = markerReason;\n} else if (agentFailed) {\n  route = 'error'; reason = null;\n} else {\n  route = 'answered'; reason = null;\n}\n\n// If the agent failed, still give an honest reply. An escalated message still reaches the team.\nif (agentFailed) {\n  reply = route === 'escalated'\n    ? \"Thanks for your message. I've passed it to our Customer Care team, and they'll reply by email within 1 business day. \"\n      + (r.customer_email ? '' : 'Please reply with the best email address to reach you.')\n    : (r.channel === 'email'\n      ? '' // no email is sent; \"Collect Alerts\" asks a person to reply\n      : \"Sorry, I couldn't process your message just now. Please try again in a moment.\");\n  reply = reply.trim();\n}\n\nreturn [{\n  json: {\n    ...r,\n    reply,\n    route,\n    escalation_reason: reason,\n    handoff_marker: markerReason,\n    agent_failed: agentFailed,\n  },\n}];"
+      },
+      "id": "3c574043-b61a-4653-9006-69e41ed1ef8a",
+      "name": "Check Handoff",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2848,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select\n  (select ticket_id from support_messages\n     where session_id = $1 and ticket_id is not null\n     order by id desc limit 1) as session_ticket_id,\n  (select customer_email from support_messages\n     where session_id = $1 and customer_email is not null\n     order by id desc limit 1) as session_email,\n  (select order_number from support_messages\n     where session_id = $1 and order_number is not null\n     order by id desc limit 1) as session_order,\n  (select string_agg(distinct escalation_reason, ',') from support_messages\n     where session_id = $1 and escalation_reason is not null) as session_reasons,\n  (select string_agg(line, E'\\n' order by id) from (\n     select id, '[Customer] ' || message || E'\\n[Assistant] ' || coalesce(ai_reply, '') as line\n     from support_messages\n     where session_id = $1\n     order by id desc limit 20) recent) as transcript;",
+        "options": {
+          "queryReplacement": "={{ $json.session_id }}"
+        }
+      },
+      "id": "44eee858-6bbf-4e0f-b7fa-749729e76cb6",
+      "name": "Session Lookup",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3296,
+        0
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// What does this message mean for the conversation's ticket? One conversation = one ticket.\n// create         : passed to the team, no ticket yet in this conversation\n// escalate_again : the conversation has a ticket and this message is urgent or has a new reason\n// attachments    : the conversation has a ticket and the customer sent files (photos, receipts)\n// add_email      : the conversation has a ticket and the customer just gave an email\n// append         : any other message in a conversation that has a ticket (saved quietly),\n//                  including emails in a thread a person is handling (their Slack note comes from \"Collect Alerts\")\n// none           : no ticket involved\nconst h = $('Check Handoff').first().json;\nconst s = $input.first().json || {};\n\nconst sessionTicket = s.session_ticket_id || null;\nconst email = h.customer_email || s.session_email || null;\nconst order = h.order_number || s.session_order || null;\nconst emailIsNew = !!h.customer_email && h.customer_email !== s.session_email;\nconst orderIsNew = !!h.order_number && h.order_number !== s.session_order;\n\nconst replyText = h.reply\n  || (h.route === 'human' ? '(no reply from the bot: a person from the team is handling this thread)' : '')\n  || (h.route === 'error' ? '(no reply sent: the AI could not answer)' : '');\nconst transcript = [s.transcript, '[Customer] ' + h.message + '\\n[Assistant] ' + replyText]\n  .filter(Boolean)\n  .join('\\n');\n\n// A follow-up only reaches Slack when it is urgent, has a reason not seen before in this\n// conversation, brings attachments, or brings the email the team was waiting for.\nconst reasons = String(s.session_reasons || '').split(',').filter(Boolean);\nconst reasonIsNew = !!h.escalation_reason && !reasons.includes(h.escalation_reason);\nconst files = h.attachment_names || [];\nconst followUp = files.length ? 'attachments' : (emailIsNew ? 'add_email' : 'append');\n\nlet action = 'none';\nif (h.route === 'escalated') {\n  if (!sessionTicket) action = 'create';\n  else if (h.urgency === 'urgent' || reasonIsNew) action = 'escalate_again';\n  else action = followUp;\n} else if (h.route === 'human') {\n  action = sessionTicket ? 'append' : 'none';\n} else if (sessionTicket && h.route !== 'spam') {\n  action = followUp;\n}\n\nreturn [{\n  json: {\n    ...h,\n    email,\n    order,\n    email_is_new: emailIsNew,\n    order_is_new: orderIsNew,\n    session_ticket_id: sessionTicket,\n    transcript,\n    ticket_action: action,\n  },\n}];"
+      },
+      "id": "058f1148-8a32-456e-aca6-954e5d581325",
+      "name": "Ticket Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3504,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1d2e3f4-0000-4000-8000-000000000046",
+              "leftValue": "={{ $json.ticket_action }}",
+              "rightValue": "none",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b9231eb9-d3bb-479e-a72e-72a3b2a6777f",
+      "name": "Ticket Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3728,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "YOUR_AIRTABLE_BASE_ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "YOUR_TICKETS_TABLE_ID",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ $json.email && ($json.ticket_action === 'create' || $json.email_is_new) ? \"AND(LOWER({Customer email}) = '\" + $json.email + \"', {Status} != 'Resolved', {Session ID} != '\" + $json.session_id + \"')\" : \"FALSE()\" }}",
+        "returnAll": false,
+        "limit": 5,
+        "options": {}
+      },
+      "id": "aaa68564-43a6-4882-92f4-7a11b1066e5f",
+      "name": "Find Other Open Tickets",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        4016,
+        0
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Airtable fields for a new ticket, or the changes for the conversation's existing ticket.\n// Field names and select options must match the Tickets table exactly (see the README).\nconst p = $('Ticket Plan').first().json;\n\nconst others = $input.all()\n  .map(i => i.json)\n  .filter(r => r && typeof r.id === 'string' && r.id.startsWith('rec'));\nconst otherTickets = others\n  .map(r => '#' + (r.Ticket ?? (r.fields && r.fields.Ticket) ?? '?'))\n  .join(', ');\n\n// Escalations from low-urgency messages are recorded as normal.\nconst urgency = p.urgency === 'urgent' ? 'urgent' : 'normal';\n\nif (p.ticket_action === 'create') {\n  const fields = {\n    'Status': 'Open',\n    'Urgency': urgency,\n    'Category': p.category,\n    'Topic': p.complaint_topic || 'none',\n    'Escalation reason': p.escalation_reason,\n    'Channel': p.channel,\n    'Summary': p.summary || '(no summary: triage failed)',\n    'Customer message': p.transcript,\n    'AI reply sent': p.reply,\n    'Session ID': p.session_id,\n  };\n  if (p.customer_name) fields['Customer name'] = p.customer_name;\n  if (p.email) fields['Customer email'] = p.email;\n  if (p.order) fields['Order number'] = p.order;\n  if (otherTickets) fields['Other open tickets'] = otherTickets;\n  return [{ json: fields }];\n}\n\n// escalate_again, add_email, append: update the existing ticket.\nconst changes = { id: p.session_ticket_id, 'Customer message': p.transcript };\nif (p.email_is_new) changes['Customer email'] = p.email;\nif (p.order_is_new) changes['Order number'] = p.order;\nif (p.ticket_action === 'escalate_again' && urgency === 'urgent') changes['Urgency'] = 'urgent';\nif (otherTickets) changes['Other open tickets'] = otherTickets;\nreturn [{ json: changes }];"
+      },
+      "id": "a8de6aec-532d-433a-a57c-2ecefe2796aa",
+      "name": "Build Ticket Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1d2e3f4-0000-4000-8000-000000000049",
+              "leftValue": "={{ $('Ticket Plan').first().json.ticket_action }}",
+              "rightValue": "create",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fc31ea3d-f316-4d74-a337-490414978167",
+      "name": "New Ticket?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "YOUR_AIRTABLE_BASE_ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "YOUR_TICKETS_TABLE_ID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "23dee32c-67d3-4b5c-9cb6-f6b34f804602",
+      "name": "Create Ticket",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        4672,
+        -144
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "YOUR_AIRTABLE_BASE_ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "YOUR_TICKETS_TABLE_ID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "446bc1fd-55ad-4388-98b9-7be9c05eacde",
+      "name": "Update Ticket",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        4672,
+        144
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Text for #support-escalations. URGENT comes first; every alert links to the ticket.\n// Quiet updates (the customer just kept chatting) are saved on the ticket without a Slack message.\nconst p = $('Ticket Plan').first().json;\nconst rec = $input.first().json || {};\nconst saved = typeof rec.id === 'string' && rec.id.startsWith('rec');\nconst f = rec.fields || rec;\nconst num = f.Ticket ?? '?';\nconst other = f['Other open tickets'];\nconst urgent = p.urgency === 'urgent';\nconst who = p.email ? (p.customer_name ? p.customer_name + ' (' + p.email + ')' : p.email) : 'email not given yet';\nconst files = p.attachment_names || [];\nconst filesLine = files.length ? ':paperclip: ' + files.length + ' attachment(s): ' + files.join(', ') : '';\nconst link = saved\n  ? '<https://airtable.com/YOUR_AIRTABLE_BASE_ID/YOUR_TICKETS_TABLE_ID/' + rec.id + '|Open ticket #' + num + ' in Airtable>'\n  : '';\nconst lines = [];\n\nif (!saved) {\n  lines.push(':warning: *A ticket could not be saved to Airtable.* Check n8n execution ' + $execution.id + '.');\n  lines.push('Customer: ' + who + ' · Action: ' + p.ticket_action + ' · Reason: ' + (p.escalation_reason || '-'));\n  lines.push('> ' + p.message);\n  return [{ json: { notify: true, text: lines.join('\\n') } }];\n}\n\nif (p.ticket_action === 'create') {\n  lines.push((urgent ? ':rotating_light: *URGENT* · ' : '') + '*New ticket #' + num + '* · ' + p.escalation_reason);\n  lines.push('*Category:* ' + p.category + ' · *Topic:* ' + p.complaint_topic + ' · *Channel:* ' + p.channel);\n  lines.push('*Customer:* ' + who + (p.order ? ' · *Order:* ' + p.order : ''));\n  lines.push('*Summary:* ' + (p.summary || '(none)'));\n  if (other) lines.push(':link: This customer also has open ticket(s): ' + other);\n  if (filesLine) lines.push(filesLine);\n  lines.push(link);\n} else if (p.ticket_action === 'escalate_again') {\n  lines.push((urgent ? ':rotating_light: *URGENT* · ' : '') + '*Ticket #' + num + ':* new message from the customer that needs the team (' + p.escalation_reason + ').');\n  lines.push('*Summary:* ' + (p.summary || '(none)'));\n  if (filesLine) lines.push(filesLine);\n  lines.push(link);\n} else if (p.ticket_action === 'attachments') {\n  lines.push(':paperclip: *Ticket #' + num + ':* the customer sent ' + files.length + ' attachment(s) by email (' + files.join(', ') + '). Ready for review.');\n  lines.push(link);\n} else if (p.ticket_action === 'add_email') {\n  lines.push('*Ticket #' + num + ':* customer email added (' + p.email + '). Ready for a reply.');\n  if (other) lines.push(':link: This customer also has open ticket(s): ' + other);\n  lines.push(link);\n} else {\n  return [{ json: { notify: false, text: '' } }];\n}\nreturn [{ json: { notify: true, text: lines.join('\\n') } }];"
+      },
+      "id": "7e7395d8-9892-4022-bce8-93dde9e78d0a",
+      "name": "Compose Slack",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4896,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1d2e3f4-0000-4000-8000-000000000053",
+              "leftValue": "={{ $json.notify }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cc30470f-524e-418a-bb46-57eb134ecbcb",
+      "name": "Notify Team?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5104,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_SUPPORT_ESCALATIONS_CHANNEL_ID",
+          "mode": "id"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "id": "ceee7941-1d38-44a2-b350-d3891557ba1f",
+      "name": "Slack: #support-escalations",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        5328,
+        -144
+      ],
+      "webhookId": "8bfa8224-d353-402b-b6b2-95e300bfbe21",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Only the columns of the support_messages table, plus the ticket this conversation belongs to.\nconst p = $('Ticket Plan').first().json;\nlet ticketId = p.session_ticket_id || null;\nif ($('Create Ticket').isExecuted) {\n  const rec = $('Create Ticket').first().json || {};\n  if (typeof rec.id === 'string' && rec.id.startsWith('rec')) ticketId = rec.id;\n}\nreturn [{\n  json: {\n    channel: p.channel,\n    session_id: p.session_id,\n    customer_name: p.customer_name,\n    customer_email: p.customer_email,\n    order_number: p.order_number,\n    message: p.message,\n    category: p.category,\n    urgency: p.urgency,\n    complaint_topic: p.complaint_topic,\n    sensitive_topic: p.sensitive_topic,\n    route: p.route,\n    escalation_reason: p.escalation_reason,\n    ai_reply: p.reply || null,\n    ticket_id: ticketId,\n    execution_id: String($execution.id),\n  },\n}];"
+      },
+      "id": "aea27d4f-8e39-4399-8644-61ba4c276ed9",
+      "name": "Prepare Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5616,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "support_messages",
+          "mode": "list",
+          "cachedResultName": "support_messages"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "773fbf92-503c-4597-a74d-fa460c3c3e8a",
+      "name": "Log Message",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        5824,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// The chat window shows the `output` field of the last node.\nreturn [{ json: { output: $('Check Handoff').first().json.reply } }];"
+      },
+      "id": "f4dcc868-b48b-411b-b02c-142db5ea07e2",
+      "name": "Chat Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6928,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1d2e3f4-0000-4000-8000-000000000055",
+              "leftValue": "={{ $('Ticket Plan').first().json.channel }}",
+              "rightValue": "chat",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6d79388b-5dae-49f4-ac5c-c9d70f0b4940",
+      "name": "Chat?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6704,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1d2e3f4-0000-4000-8000-000000000056",
+              "leftValue": "={{ ['answered', 'escalated'].includes($('Ticket Plan').first().json.route) && !!$('Ticket Plan').first().json.reply }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5eac3146-b48d-46b6-8404-e129ba394f44",
+      "name": "Send Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6928,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $('Read Email').first().json.gmail_message_id }}",
+        "emailType": "text",
+        "message": "={{ $('Ticket Plan').first().json.reply }}\n\n— Saltgrove Skin Support\n(This reply was written by our AI assistant. Our Customer Care team works Monday to Friday, 9 am to 5 pm Pacific Time.)",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "Saltgrove Skin Support",
+          "replyToSenderOnly": true
+        }
+      },
+      "id": "2005b962-36cf-45cb-a402-746d1a908027",
+      "name": "Gmail: Reply in Thread",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        7152,
+        144
+      ],
+      "webhookId": "3182d195-32e7-44a7-8f20-967821b520c5",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "thread",
+        "operation": "get",
+        "threadId": "={{ $json.session_id.replace(/^email:/, '') }}",
+        "options": {
+          "returnOnlyMessages": true
+        }
+      },
+      "id": "150d7595-d4f0-4cda-a155-529db9fab33f",
+      "name": "Gmail: Read Thread",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        144
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "webhookId": "d46c1881-b3b9-4911-a39e-1f1a4efc1927",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Has a person from the team already replied in this email thread?\n// Every bot reply gets the Gmail label \"AI reply\" right after it is sent (see \"Label AI Reply\").\n// A sent message in the thread without that label was written by a person, so the bot stays quiet.\n// (Checking the footer text would not work: a person's reply quotes the bot's earlier email, footer included.)\nconst AI_LABEL = 'YOUR_AI_REPLY_LABEL_ID';\nconst email = $('Read Email').first().json;\nconst items = $input.all().map(i => i.json || {});\nconst threadCheckFailed = items.some(i => i.error);\nconst messages = items\n  .flatMap(i => (Array.isArray(i.messages) ? i.messages : [i]))\n  .filter(m => m && m.id);\nconst labelsOf = m => [\n  ...(Array.isArray(m.labelIds) ? m.labelIds : []),\n  ...(Array.isArray(m.labels) ? m.labels.map(l => l.id) : []),\n];\nconst personReplies = messages.filter(m => {\n  const labels = labelsOf(m);\n  return labels.includes('SENT') && !labels.includes(AI_LABEL);\n});\n\nreturn [{\n  json: {\n    ...email,\n    human_takeover: personReplies.length > 0,\n    thread_check_failed: threadCheckFailed,\n  },\n}];"
+      },
+      "id": "03e4677c-f9d9-43a4-9b11-2b1aa00b7f36",
+      "name": "Human Took Over?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Problems the workflow caught so the customer still got an answer, and emails a person is handling.\n// Someone must act for a customer  -> #support-escalations.\n// The workflow needs a look        -> #automation-errors.\n// At most one Slack message per run. Crashes are reported by the Error workflow instead.\nconst SUPPORT = 'YOUR_SUPPORT_ESCALATIONS_CHANNEL_ID';  // #support-escalations\nconst ERRORS = 'YOUR_AUTOMATION_ERRORS_CHANNEL_ID';   // #automation-errors\nconst p = $('Ticket Plan').first().json;\n\nconst ran = name => { try { return $(name).isExecuted; } catch (e) { return false; } };\nconst failed = name => ran(name) && $(name).all().some(i => i.json && i.json.error);\n\nconst who = (p.customer_name ? p.customer_name + ' ' : '') + (p.email ? '(' + p.email + ')' : '(email not given)');\nconst subject = (String(p.message || '').match(/^Subject: (.*)$/m) || [])[1] || '(no subject)';\nconst preview = String(p.message || '').replace(/^Subject: .*\\n+/, '').replace(/\\s+/g, ' ').trim().slice(0, 200);\n\nconst tech = [];\nif (p.thread_check_failed) tech.push('Could not read the email thread, so the bot could not check whether a person had already replied.');\nif (p.triage_failed) tech.push('Triage failed, so the message was sorted by the fallback rules.');\nif (p.agent_failed) tech.push('The AI agent failed' + (p.route === 'escalated' ? '; a fixed holding reply was sent instead.' : '.'));\nif (failed('Session Lookup')) tech.push('Looking up this conversation in Supabase failed.');\nif (failed('Find Other Open Tickets')) tech.push(\"Checking the customer's other open tickets failed.\");\nif (failed('Slack: #support-escalations')) tech.push('The alert to #support-escalations could not be posted.');\nif (failed('Log Message')) tech.push('The message was not saved to support_messages.');\n\nconst lines = [];\nlet channel = ERRORS;\n\nif (p.channel === 'email' && p.route === 'error') {\n  channel = SUPPORT;\n  lines.push(':warning: *This customer has not received a reply.* The AI could not answer the email, so nothing was sent. Please reply in Gmail yourself.');\n  lines.push('*Customer:* ' + who + ' · *Subject:* ' + subject);\n  lines.push('> ' + preview);\n} else if (p.route === 'human') {\n  channel = SUPPORT;\n  let ticket = '';\n  let link = '';\n  if (ran('Update Ticket')) {\n    const rec = $('Update Ticket').first().json || {};\n    if (typeof rec.id === 'string' && rec.id.startsWith('rec')) {\n      ticket = '*Ticket #' + ((rec.fields || rec).Ticket ?? '?') + ':* ';\n      link = '<https://airtable.com/YOUR_AIRTABLE_BASE_ID/YOUR_TICKETS_TABLE_ID/' + rec.id + '|Open the ticket in Airtable>';\n    }\n  }\n  lines.push((p.urgency === 'urgent' ? ':rotating_light: *URGENT* · ' : '') + ':speech_balloon: ' + ticket\n    + 'the customer replied in an email thread a person from the team is handling. The bot did not reply.');\n  lines.push('*Customer:* ' + who + ' · *Subject:* ' + subject);\n  lines.push('*Summary:* ' + (p.summary || preview));\n  const files = p.attachment_names || [];\n  if (files.length) lines.push(':paperclip: ' + files.length + ' attachment(s): ' + files.join(', '));\n  if (link) lines.push(link);\n}\n\nif (tech.length) {\n  lines.push(lines.length\n    ? '_Problems in this run (execution ' + $execution.id + '):_'\n    : ':gear: *Problems while handling ' + (p.channel === 'email' ? 'an email' : 'a chat message') + '* (execution ' + $execution.id + ', customer ' + who + ')');\n  tech.forEach(t => lines.push('• ' + t));\n}\n\nreturn [{ json: { send: lines.length > 0, channel, text: lines.join('\\n') } }];"
+      },
+      "id": "8f377ca0-87db-45ea-81bf-11568d5e7bcf",
+      "name": "Collect Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6048,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1d2e3f4-0000-4000-8000-000000000061",
+              "leftValue": "={{ $json.send }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "1268ab61-3b3c-4e7a-a99d-62dae9c38497",
+      "name": "Any Alerts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6272,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.channel }}"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "id": "99cb426b-2a88-4254-988c-9eac917d5c82",
+      "name": "Slack: Alerts",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        6496,
+        -144
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "webhookId": "bd7c458b-1b4a-41fc-9f7d-b54ba85c8c74",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.id }}",
+        "labelIds": [
+          "YOUR_AI_REPLY_LABEL_ID"
+        ]
+      },
+      "id": "a6e6cd2c-f38f-4fa8-992b-41ae1e6fc420",
+      "name": "Label AI Reply",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        7376,
+        144
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "webhookId": "8212cbd8-2679-4565-81a8-36283184f4a1",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Was the email reply sent, and labelled \"AI reply\"? The label is how the bot later tells\n// its own replies apart from a person's replies in the same thread.\n// Nothing to report -> no item, and the run ends here.\nconst AI_LABEL = 'YOUR_AI_REPLY_LABEL_ID';\nconst SUPPORT = 'YOUR_SUPPORT_ESCALATIONS_CHANNEL_ID';  // #support-escalations\nconst ERRORS = 'YOUR_AUTOMATION_ERRORS_CHANNEL_ID';   // #automation-errors\nconst p = $('Ticket Plan').first().json;\nconst sent = $('Gmail: Reply in Thread').first().json || {};\nconst labelled = $input.first().json || {};\nconst who = (p.customer_name ? p.customer_name + ' ' : '') + '(' + (p.email || p.customer_email || 'unknown') + ')';\nconst subject = (String(p.message || '').match(/^Subject: (.*)$/m) || [])[1] || '(no subject)';\n\nif (!sent.id) {\n  return [{ json: { channel: SUPPORT, text: [\n    ':warning: *This customer has not received a reply.* The email reply could not be sent. Please reply in Gmail yourself.',\n    '*Customer:* ' + who + ' · *Subject:* ' + subject,\n    '_Execution ' + $execution.id + ': ' + String(sent.error || 'unknown error').slice(0, 200) + '_',\n  ].join('\\n') } }];\n}\n\nconst labels = Array.isArray(labelled.labelIds) ? labelled.labelIds : [];\nif (!labels.includes(AI_LABEL)) {\n  return [{ json: { channel: ERRORS, text: [\n    ':label: The bot replied to ' + who + ' (subject: ' + subject + '), but the reply could not be labelled \"AI reply\" (execution ' + $execution.id + ').',\n    'Add the label to that reply in Gmail by hand. Without it, the bot treats the reply as written by a person and stays quiet in that thread.',\n  ].join('\\n') } }];\n}\n\nreturn [];"
+      },
+      "id": "b89f76cb-102f-4d93-a9b9-cd42f992943f",
+      "name": "Check Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7584,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.channel }}"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "id": "bf912373-ed07-48de-ae6f-f411759cb039",
+      "name": "Slack: Reply Problem",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        7808,
+        144
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "webhookId": "7373e0dc-9719-4aa5-b76c-e9e51da65cc9",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "379086d7-f5a8-46b3-b717-f55a009ef4e7",
+      "name": "When Called by Eval Runner",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        432
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "5716ee9a-255b-4323-a955-04690b169e0a",
+      "name": "Read Eval Case",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        432
+      ],
+      "parameters": {
+        "jsCode": "// Eval mode: one test case sent by \"Saltgrove – Eval Runner\", shaped like Read Chat / Read Email.\n// The case then goes through the same Normalize, triage, Route and agent as real messages.\n// \"Eval Run?\" stops it right after Check Handoff: no ticket, Slack, email or log row.\nconst c = $input.first().json;\nconst run = String(c.run_id || 'manual');\nconst isEmail = c.channel === 'email';\nconst body = String(c.message || '').trim();\nconst message = isEmail ? 'Subject: ' + (c.subject || '(no subject)') + '\\n\\n' + body : body;\nconst orderMatch = message.match(/\\bSG-?(\\d{5})\\b/i);\nconst emailMatch = isEmail ? null : message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);\nconst name = isEmail && c.customer_name ? String(c.customer_name).trim() : null;\n\nreturn [{\n  json: {\n    channel: isEmail ? 'email' : 'chat',\n    // A fresh conversation memory for every run; cases with the same session (3a/3b, 6a/6b) share it.\n    session_id: 'eval:' + run + ':' + (c.session || c.case_id),\n    message,\n    customer_name: name,\n    customer_first_name: name ? name.split(/\\s+/)[0] : null,\n    customer_email: isEmail ? String(c.customer_email || '').toLowerCase() || null : (emailMatch ? emailMatch[0].toLowerCase() : null),\n    order_number: orderMatch ? 'SG-' + orderMatch[1] : null,\n    attachment_names: [],\n    human_takeover: false,\n    thread_check_failed: false,\n    eval: true,\n    eval_run_id: run,\n    eval_case_id: String(c.case_id),\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "d2894df7-173c-416d-80e1-0fe56ece2732",
+      "name": "Eval Run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3072,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "e7a10000-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.eval === true }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3c240ab4-cf97-4066-9af1-83b1b3cb297a",
+      "name": "Eval Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3296,
+        -144
+      ],
+      "parameters": {
+        "jsCode": "// Eval mode ends here. This item goes back to the Eval Runner, which checks it.\nconst r = $input.first().json;\nreturn [{\n  json: {\n    case_id: r.eval_case_id,\n    run_id: r.eval_run_id,\n    route: r.route,\n    escalation_reason: r.escalation_reason || null,\n    category: r.category,\n    urgency: r.urgency,\n    complaint_topic: r.complaint_topic,\n    sensitive_topic: r.sensitive_topic === true,\n    triage_failed: r.triage_failed === true,\n    agent_failed: r.agent_failed === true,\n    team_status: r.team_status,\n    reply: r.reply || '',\n    execution_id: String($execution.id),\n  },\n}];\n"
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Chat Message": {
+      "main": [
+        [
+          {
+            "node": "Read Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Chat": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail: New Email": {
+      "main": [
+        [
+          {
+            "node": "Read Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Email": {
+      "main": [
+        [
+          {
+            "node": "Customer Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize": {
+      "main": [
+        [
+          {
+            "node": "AI: Triage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Triage": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Skip Agent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Support Agent": {
+      "main": [
+        [
+          {
+            "node": "Check Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Session Lookup": {
+      "main": [
+        [
+          {
+            "node": "Ticket Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Other Open Tickets": {
+      "main": [
+        [
+          {
+            "node": "Build Ticket Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Ticket": {
+      "main": [
+        [
+          {
+            "node": "Compose Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Ticket": {
+      "main": [
+        [
+          {
+            "node": "Compose Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: #support-escalations": {
+      "main": [
+        [
+          {
+            "node": "Prepare Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Log": {
+      "main": [
+        [
+          {
+            "node": "Log Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticket Needed?": {
+      "main": [
+        [
+          {
+            "node": "Find Other Open Tickets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Ticket?": {
+      "main": [
+        [
+          {
+            "node": "Create Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Team?": {
+      "main": [
+        [
+          {
+            "node": "Slack: #support-escalations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Ticket Fields": {
+      "main": [
+        [
+          {
+            "node": "New Ticket?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Slack": {
+      "main": [
+        [
+          {
+            "node": "Notify Team?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticket Plan": {
+      "main": [
+        [
+          {
+            "node": "Ticket Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat?": {
+      "main": [
+        [
+          {
+            "node": "Chat Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email?": {
+      "main": [
+        [
+          {
+            "node": "Gmail: Reply in Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini – Triage": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI: Triage",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Triage Format": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI: Triage",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini – Agent": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Support Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Support Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Help Docs Search": {
+      "ai_tool": [
+        [
+          {
+            "node": "Support Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "lookup_order": {
+      "ai_tool": [
+        [
+          {
+            "node": "Support Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Help Docs Search",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Customer Email?": {
+      "main": [
+        [
+          {
+            "node": "Gmail: Read Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail: Read Thread": {
+      "main": [
+        [
+          {
+            "node": "Human Took Over?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Took Over?": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Agent?": {
+      "main": [
+        [
+          {
+            "node": "Check Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Support Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Message": {
+      "main": [
+        [
+          {
+            "node": "Collect Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Alerts": {
+      "main": [
+        [
+          {
+            "node": "Any Alerts?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Alerts?": {
+      "main": [
+        [
+          {
+            "node": "Slack: Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chat?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: Alerts": {
+      "main": [
+        [
+          {
+            "node": "Chat?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail: Reply in Thread": {
+      "main": [
+        [
+          {
+            "node": "Label AI Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label AI Reply": {
+      "main": [
+        [
+          {
+            "node": "Check Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Reply": {
+      "main": [
+        [
+          {
+            "node": "Slack: Reply Problem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Called by Eval Runner": {
+      "main": [
+        [
+          {
+            "node": "Read Eval Case",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Eval Case": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Handoff": {
+      "main": [
+        [
+          {
+            "node": "Eval Run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval Run?": {
+      "main": [
+        [
+          {
+            "node": "Eval Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Session Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timezone": "America/Los_Angeles"
+  },
+  "tags": []
+}

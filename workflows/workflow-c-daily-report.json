@@ -1,0 +1,396 @@
+{
+  "name": "Saltgrove – Daily Report",
+  "nodes": [
+    {
+      "id": "9d7397ee-a476-4a4d-a055-d499851b4578",
+      "name": "Every Day 5 pm PT",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "daysInterval": 1,
+              "field": "days",
+              "triggerAtHour": 17,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e7e9b778-c48a-4300-b0dd-d7937384f078",
+      "name": "Read Messages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select\n  count(*)::int as total,\n  coalesce(json_agg(json_build_object(\n    'id', id, 'session_id', session_id, 'channel', channel, 'route', route, 'category', category, 'urgency', urgency,\n    'complaint_topic', complaint_topic, 'escalation_reason', escalation_reason,\n    'message', left(message, 600)\n  ) order by received_at), '[]'::json) as messages\nfrom support_messages\nwhere received_at > now() - interval '24 hours';",
+        "options": {}
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "id": "508c264f-25e4-4413-bc79-214146fa79b2",
+      "name": "Read Open Tickets",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "resource": "record",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BASE_ID"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_TICKETS_TABLE_ID"
+        },
+        "filterByFormula": "{Status} != 'Resolved'",
+        "returnAll": true,
+        "options": {}
+      },
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e74a910b-e0ee-4b4b-8810-bd4f61e4ade3",
+      "name": "Find Questions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Messages the agent could not answer from the help documents (escalated, reason not_in_docs).\n// The agent already made that call in Workflow B. Here they are only collected, so AI can name their topics.\nconst data = $('Read Messages').first().json || {};\nconst msgs = Array.isArray(data.messages) ? data.messages : [];\n\nconst questions = msgs\n  .filter(m => m.escalation_reason === 'not_in_docs')\n  .map(m => {\n    const raw = String(m.message || '');\n    const s = raw.match(/^Subject: ([^\\n]*)\\n+([\\s\\S]*)$/);\n    const text = s ? (s[1].trim() + ': ' + s[2].trim()) : raw.trim();\n    return { id: Number(m.id), text: text.replace(/\\s+/g, ' ').slice(0, 400) };\n  });\n\nreturn [{ json: { count: questions.length, questions, questions_json: JSON.stringify(questions) } }];"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "c9f5aa56-124f-49a0-9822-6b141b3cbc82",
+      "name": "Any Questions?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        940,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c3a1b2c4-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4fdf563c-d651-438d-a695-764782a5b643",
+      "name": "AI: Label Topics",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        1160,
+        -140
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=You help the owner of Saltgrove Skin, an online skincare store, see what customers ask about that the help documents do not cover.\n\nGive each customer message below a short topic label: 2 to 5 words in English that name what the customer wants (for example \"Rewards or points program\", \"Wholesale pricing\").\n- Messages that ask for the same thing must get exactly the same label, even when they are worded differently or only hint at it.\n- Use plain words a shop owner understands. No customer names, emails or order numbers.\n- Do not answer the questions.\n- Return one label for every message id.\n\nMessages (JSON):\n{{ $json.questions_json }}",
+        "hasOutputParser": true
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f80f8553-ae4a-4fb9-b4d7-e884d38d54b8",
+      "name": "Gemini – Topics",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        220
+      ],
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash-lite",
+        "options": {
+          "temperature": 0
+        }
+      }
+    },
+    {
+      "id": "955651ee-213f-4017-91fc-4a0bc6a7bd09",
+      "name": "Topic Format",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1280,
+        220
+      ],
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"labels\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"id\": {\n            \"type\": \"number\"\n          },\n          \"topic\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"id\",\n          \"topic\"\n        ]\n      }\n    }\n  },\n  \"required\": [\n    \"labels\"\n  ]\n}"
+      }
+    },
+    {
+      "id": "de1cc855-8da2-4ccb-b6ee-043167c132e1",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// The owner's daily report. Code does all the counting.\n// AI only named the topics of questions the help documents could not answer (\"AI: Label Topics\").\nconst LA = 'America/Los_Angeles';\nconst TICKETS_URL = 'https://airtable.com/YOUR_AIRTABLE_BASE_ID/YOUR_TICKETS_TABLE_ID';\nconst TOPIC_NAMES = {\n  shipping_delay: 'Shipping delay', missing_package: 'Missing package',\n  damaged_or_wrong_item: 'Damaged or wrong item', skin_reaction: 'Skin reaction',\n  product_not_suitable: 'Product not suitable', billing_or_subscription: 'Billing or subscription',\n  duties_or_fees: 'Duties or fees', service: 'Service', other: 'Other',\n};\n\nconst ran = name => { try { return $(name).isExecuted; } catch (e) { return false; } };\nconst plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));\nconst now = $now.setZone(LA);\n\nconst data = $('Read Messages').first().json || {};\nconst msgs = Array.isArray(data.messages) ? data.messages : [];\nconst count = f => msgs.filter(f).length;\nconst sections = [];\n\nsections.push(':bar_chart: *Saltgrove support · ' + now.toFormat('ccc, LLL d') + '*  (last 24 hours, to ' + now.toFormat('h:mm a') + ' PT)');\n\n// 1. First line: is anyone still waiting for a person? (open tickets in Airtable)\nconst ticketItems = ran('Read Open Tickets') ? $('Read Open Tickets').all().map(i => i.json || {}) : [];\nconst ticketsFailed = !ran('Read Open Tickets') || ticketItems.some(t => t.error);\nconst tickets = ticketItems\n  .filter(t => typeof t.id === 'string' && t.id.startsWith('rec'))\n  .map(t => { const f = t.fields || t; return { num: f.Ticket, urgent: f.Urgency === 'urgent', created: f.Created || t.createdTime || null }; });\n\nif (ticketsFailed) {\n  sections.push(':warning: *Could not read the tickets from Airtable today.* Check them in Airtable.');\n} else if (!tickets.length) {\n  sections.push(':white_check_mark: *No tickets are waiting for a person.*');\n} else {\n  const urgent = tickets.filter(t => t.urgent).length;\n  const oldest = tickets.filter(t => t.created).sort((a, b) => String(a.created).localeCompare(String(b.created)))[0];\n  let line = ':hourglass_flowing_sand: *' + plural(tickets.length, 'ticket') + (tickets.length === 1 ? ' is' : ' are') + ' waiting for a person.*';\n  if (urgent) line += ' ' + urgent + ' urgent.';\n  if (oldest) {\n    const hours = Math.max(0, Math.floor((Date.now() - new Date(oldest.created).getTime()) / 3600000));\n    line += ' Oldest: ticket #' + oldest.num + ', open for ' + (hours < 24 ? plural(hours, 'hour') : plural(Math.floor(hours / 24), 'day')) + '.';\n  }\n  sections.push(line);\n}\n\n// 2. Messages in the last 24 hours, by what happened to them.\nif (!msgs.length) {\n  sections.push('*Messages:* none in the last 24 hours.');\n} else {\n  const chat = count(m => m.channel === 'chat');\n  const lines = ['*Messages:* ' + msgs.length + ' (' + chat + ' chat, ' + (msgs.length - chat) + ' email)'];\n  lines.push('• Answered by the bot: ' + count(m => m.route === 'answered'));\n  lines.push('• Passed to the team: ' + count(m => m.route === 'escalated'));\n  const extra = [];\n  const spam = count(m => m.route === 'spam');\n  const human = count(m => m.route === 'human');\n  if (spam) extra.push('Spam: ' + spam);\n  if (human) extra.push('In threads a person is handling: ' + human);\n  if (extra.length) lines.push('• ' + extra.join(' · '));\n  sections.push(lines.join('\\n'));\n}\n\n// 3. Top complaint topics (set by triage), counted by code per conversation,\n//    so a customer who writes three times about one broken jar counts once.\nconst byTopic = {};\nmsgs.filter(m => m.route !== 'spam' && m.complaint_topic && m.complaint_topic !== 'none')\n  .forEach(m => { (byTopic[m.complaint_topic] = byTopic[m.complaint_topic] || new Set()).add(m.session_id || ('msg:' + m.id)); });\nconst top = Object.entries(byTopic).map(([t, set]) => [t, set.size])\n  .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 3);\nsections.push(top.length\n  ? '*Top complaints:*\\n' + top.map(([t, n], i) => (i + 1) + '. ' + (TOPIC_NAMES[t] || t) + ': ' + plural(n, 'customer')).join('\\n')\n  : '*Top complaints:* none.');\n\n// 4. Asked, but not in the help documents. AI named the topics; code groups and counts them.\nconst questions = (ran('Find Questions') && $('Find Questions').first().json.questions) || [];\nlet labelsMissing = false;\nif (questions.length) {\n  const out = ran('AI: Label Topics') ? ($('AI: Label Topics').first().json.output || {}) : {};\n  const labels = {};\n  (Array.isArray(out.labels) ? out.labels : []).forEach(l => {\n    if (l && l.topic) labels[Number(l.id)] = String(l.topic).trim();\n  });\n  const groups = new Map();\n  questions.forEach(qn => {\n    let topic = labels[qn.id];\n    if (!topic) {\n      labelsMissing = true;\n      topic = '\"' + (qn.text.length > 80 ? qn.text.slice(0, 80) + '…' : qn.text) + '\"';\n    }\n    const key = topic.toLowerCase();\n    const g = groups.get(key) || { topic, n: 0 };\n    g.n += 1;\n    groups.set(key, g);\n  });\n  const lines = [...groups.values()].sort((a, b) => b.n - a.n)\n    .map(g => '• ' + g.topic + (g.n > 1 ? ' (' + g.n + ')' : ''));\n  sections.push('*Asked, but not in the help docs* (worth adding):\\n' + lines.join('\\n'));\n}\n\n// 5. Customers the bot could not help.\nconst problems = [];\nconst emailErrors = count(m => m.route === 'error' && m.channel === 'email');\nconst chatErrors = count(m => m.route === 'error' && m.channel === 'chat');\nif (emailErrors) problems.push(':warning: ' + plural(emailErrors, 'email') + ' could not be answered by the AI. Check that someone replied.');\nif (chatErrors) problems.push(':warning: ' + plural(chatErrors, 'chat message') + ' got \"please try again\" because the AI failed.');\nif (labelsMissing) problems.push('_Some questions are shown as written: the AI could not name their topics._');\nif (problems.length) sections.push(problems.join('\\n'));\n\nsections.push('<' + TICKETS_URL + '|Open tickets in Airtable>');\n\nreturn [{ json: { text: sections.join('\\n\\n'), messages: msgs.length, open_tickets: tickets.length } }];"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "8fe81a4d-5dbc-4c31-8875-838e1ff7c2e9",
+      "name": "Slack: #daily-report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1760,
+        0
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_DAILY_REPORT_CHANNEL_ID",
+          "mode": "id"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "webhookId": "5e185b17-1d6b-414e-96c3-2b21014dd8ac"
+    },
+    {
+      "id": "b87dffe2-50ef-431a-b7bb-42511ca1cca5",
+      "name": "Sticky – Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -520
+      ],
+      "parameters": {
+        "content": "## Saltgrove – Daily Report\nEvery day at 5 pm Pacific, one Slack message to #daily-report for the owner. First line: tickets still waiting for a person. Then the last 24 hours: messages and what happened to them, the top complaints, and questions the help docs could not answer.\n\nCode does all the counting. AI only names the topics of the unanswered questions, so questions that mean the same thing are grouped. The report is sent even on a quiet day, so a missing report means something broke.",
+        "color": 7,
+        "width": 1960,
+        "height": 160
+      }
+    },
+    {
+      "id": "bfda0c99-28f4-41ba-9cde-b5aa5253d456",
+      "name": "Sticky – Gather",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -320
+      ],
+      "parameters": {
+        "color": 5,
+        "content": "### 1. Gather (code)\nMessages from the last 24 hours (Supabase) and tickets that are not resolved yet (Airtable).",
+        "height": 720,
+        "width": 680
+      }
+    },
+    {
+      "id": "2c3c9e48-ff5f-4d18-aac2-9a25bfc5a034",
+      "name": "Sticky – Topics",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        620,
+        -320
+      ],
+      "parameters": {
+        "color": 3,
+        "content": "### 2. Name the topics (AI)\nOnly for questions the help docs could not answer. AI gives each one a short topic label, so the same question asked in different words lands in one group. Skipped when there are none.",
+        "height": 720,
+        "width": 800
+      }
+    },
+    {
+      "id": "1b38d612-2661-4af2-8d6d-20328e6b0bd5",
+      "name": "Sticky – Send",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        -320
+      ],
+      "parameters": {
+        "color": 4,
+        "content": "### 3. Count and send (code)\nCode counts everything and writes one Slack message for the owner. Sent even on a quiet day.",
+        "height": 720,
+        "width": 480
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every Day 5 pm PT": {
+      "main": [
+        [
+          {
+            "node": "Read Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Messages": {
+      "main": [
+        [
+          {
+            "node": "Read Open Tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Open Tickets": {
+      "main": [
+        [
+          {
+            "node": "Find Questions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Questions": {
+      "main": [
+        [
+          {
+            "node": "Any Questions?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Questions?": {
+      "main": [
+        [
+          {
+            "node": "AI: Label Topics",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Label Topics": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini – Topics": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI: Label Topics",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Topic Format": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI: Label Topics",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report": {
+      "main": [
+        [
+          {
+            "node": "Slack: #daily-report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "timezone": "America/Los_Angeles"
+  },
+  "tags": []
+}

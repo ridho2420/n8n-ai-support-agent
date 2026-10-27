@@ -1,0 +1,108 @@
+{
+  "name": "Saltgrove – Demo Data",
+  "nodes": [
+    {
+      "id": "31c82ee0-529e-4b70-912c-87a9c91d0391",
+      "name": "Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "35803607-46c0-4021-8775-d16e4b3b6260",
+      "name": "Reset Demo Messages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        -120
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Demo messages for the daily report: removes earlier demo rows, then adds a fresh day of them.\n-- Every demo row has a session_id starting with 'demo:' and execution_id 'demo'.\nwith removed as (\n  delete from support_messages where session_id like 'demo:%' returning 1\n), inserted as (\n  insert into support_messages (received_at, channel, session_id, customer_name, customer_email, order_number,\n    message, category, urgency, complaint_topic, sensitive_topic, route, escalation_reason, ai_reply, ticket_id, execution_id)\n  values\n  (now() - interval '1150 minutes', 'chat', 'demo:01', null, null, null, 'Is the Barrier Balm okay for sensitive skin?', 'question', 'low', 'none', false, 'answered', null, null, null, 'demo'),\n  (now() - interval '1110 minutes', 'chat', 'demo:02', null, null, null, 'How long does shipping take to Texas?', 'question', 'low', 'none', false, 'answered', null, null, null, 'demo'),\n  (now() - interval '1080 minutes', 'email', 'demo:03', 'Priya Shah', 'priya.shah@example.com', null, 'Subject: Refill Club\n\nHow do I skip next month''s refill?', 'question', 'low', 'none', false, 'answered', null, null, null, 'demo'),\n  (now() - interval '1020 minutes', 'chat', 'demo:04', null, null, null, 'Do you have a rewards or points program?', 'question', 'low', 'none', false, 'escalated', 'not_in_docs', null, null, 'demo'),\n  (now() - interval '990 minutes', 'email', 'demo:05', 'Olivia Grant', 'olivia.grant@example.com', null, 'Subject: Broken jar\n\nMy Barrier Balm arrived with a cracked jar.', 'complaint', 'normal', 'damaged_or_wrong_item', false, 'escalated', 'complaint', null, null, 'demo'),\n  (now() - interval '950 minutes', 'chat', 'demo:06', null, null, 'SG-10235', 'I got the toner instead of the serum I ordered. Order SG-10235.', 'complaint', 'normal', 'damaged_or_wrong_item', false, 'escalated', 'complaint', null, null, 'demo'),\n  (now() - interval '900 minutes', 'email', 'demo:07', 'Grace Kim', 'grace.kim@example.com', 'SG-10234', 'Subject: Still waiting\n\nMy order SG-10234 was supposed to arrive 4 days ago.', 'complaint', 'normal', 'shipping_delay', false, 'escalated', 'complaint', null, null, 'demo'),\n  (now() - interval '870 minutes', 'chat', 'demo:08', null, null, null, 'Do you ship to Canada?', 'question', 'low', 'none', false, 'answered', null, null, null, 'demo'),\n  (now() - interval '830 minutes', 'email', 'demo:09', 'Boost Media', 'deals@boostmedia.example', null, 'Subject: Boost your Instagram\n\nGet 10,000 real followers for your store today. Reply YES.', 'spam', 'low', 'none', false, 'spam', null, null, null, 'demo'),\n  (now() - interval '800 minutes', 'chat', 'demo:10', null, null, null, 'What''s the difference between Night Shift and Dew Drop?', 'question', 'low', 'none', false, 'answered', null, null, null, 'demo'),\n  (now() - interval '760 minutes', 'email', 'demo:11', 'Mia Torres', 'mia.torres@example.com', null, 'Subject: Points?\n\nOther shops give me points every time I buy. Anything like that here?', 'question', 'low', 'none', false, 'escalated', 'not_in_docs', null, null, 'demo'),\n  (now() - interval '720 minutes', 'chat', 'demo:12', null, null, null, 'Tracking hasn''t moved in a week.', 'complaint', 'normal', 'shipping_delay', false, 'escalated', 'complaint', null, null, 'demo'),\n  (now() - interval '690 minutes', 'chat', 'demo:13', null, null, null, 'My cheeks are red and itchy after using the Night Shift serum last night.', 'complaint', 'urgent', 'skin_reaction', true, 'escalated', 'urgent', null, null, 'demo'),\n  (now() - interval '650 minutes', 'email', 'demo:14', 'Ben Ortiz', 'ben.ortiz@example.com', null, 'Subject: Leaking bottle\n\nThe Dew Drop serum leaked all over the box.', 'complaint', 'normal', 'damaged_or_wrong_item', false, 'escalated', 'complaint', null, null, 'demo'),\n  (now() - interval '610 minutes', 'chat', 'demo:15', null, null, null, 'Is the sunscreen fragrance-free?', 'question', 'low', 'none', false, 'answered', null, null, null, 'demo'),\n  (now() - interval '580 minutes', 'chat', 'demo:16', null, null, null, 'I had to pay 14 dollars in import fees. Nobody told me about this.', 'complaint', 'normal', 'duties_or_fees', false, 'escalated', 'complaint', null, null, 'demo'),\n  (now() - interval '540 minutes', 'email', 'demo:17', 'Marcus Bell', 'marcus.bell@example.com', 'SG-10236', 'Subject: Order status\n\nHi, any update on SG-10236?', 'question', 'low', 'none', false, 'answered', null, null, null, 'demo'),\n  (now() - interval '500 minutes', 'chat', 'demo:18', null, null, null, 'Do you have a loyalty card?', 'question', 'low', 'none', false, 'escalated', 'not_in_docs', null, null, 'demo'),\n  (now() - interval '470 minutes', 'email', 'demo:19', 'Olivia Grant', 'olivia.grant@example.com', null, 'Subject: Re: Broken jar\n\nThanks Maya, I''ll wait for the new jar.', 'other', 'low', 'none', false, 'human', null, null, null, 'demo'),\n  (now() - interval '430 minutes', 'chat', 'demo:20', null, null, null, 'How do I use the Weekend Glow toner?', 'question', 'low', 'none', false, 'answered', null, null, null, 'demo'),\n  (now() - interval '400 minutes', 'email', 'demo:21', 'Leo Park', 'leo.park@example.com', null, 'Subject: Late order\n\nIt''s been 12 business days and my package to Vancouver still hasn''t arrived.', 'complaint', 'normal', 'shipping_delay', false, 'escalated', 'complaint', null, null, 'demo'),\n  (now() - interval '360 minutes', 'email', 'demo:22', 'Dana White', 'dana.white@example.com', null, 'Subject: Salon order\n\nCan I get a better price if I buy 20 bottles for my salon?', 'question', 'low', 'none', false, 'escalated', 'not_in_docs', null, null, 'demo'),\n  (now() - interval '330 minutes', 'chat', 'demo:23', null, null, null, 'Can I talk to a real person, please?', 'other', 'normal', 'none', false, 'escalated', 'asked_for_human', null, null, 'demo'),\n  (now() - interval '300 minutes', 'email', 'demo:24', 'Sara Novak', 'sara.novak@example.com', null, 'Subject: Customs fee?\n\nWhy did I have to pay customs when my order arrived?', 'complaint', 'normal', 'duties_or_fees', false, 'escalated', 'complaint', null, null, 'demo'),\n  (now() - interval '260 minutes', 'chat', 'demo:25', null, null, null, 'Box was crushed and the pump on my serum is broken.', 'complaint', 'normal', 'damaged_or_wrong_item', false, 'escalated', 'complaint', null, null, 'demo'),\n  (now() - interval '230 minutes', 'email', 'demo:26', 'Noah Reed', 'noah.reed@example.com', null, 'Subject: Refund please\n\nI forgot to skip my Refill Club order and got charged. Please refund it.', 'refund_request', 'normal', 'billing_or_subscription', false, 'escalated', 'refund_request', null, null, 'demo'),\n  (now() - interval '190 minutes', 'chat', 'demo:27', null, null, null, 'How often should I use Night Shift when I''m starting out?', 'question', 'low', 'none', false, 'answered', null, null, null, 'demo'),\n  (now() - interval '150 minutes', 'email', 'demo:28', 'Hannah Cole', 'hannah.cole@example.com', null, 'Subject: Return window\n\nHow many days do I have to return an unopened product?', 'question', 'low', 'none', false, 'answered', null, null, null, 'demo'),\n  (now() - interval '120 minutes', 'email', 'demo:29', 'PackPro Supplies', 'sales@packpro.example', null, 'Subject: Cheap packaging\n\nWe sell bottles and jars at factory prices. Reply for our catalog.', 'spam', 'low', 'none', false, 'spam', null, null, null, 'demo'),\n  (now() - interval '90 minutes', 'chat', 'demo:30', null, null, null, 'Do you offer free shipping?', 'question', 'low', 'none', false, 'answered', null, null, null, 'demo'),\n  (now() - interval '60 minutes', 'email', 'demo:31', 'Chris Young', 'chris.young@example.com', null, 'Subject: Ingredients\n\nIs there niacinamide in the Dew Drop serum?', 'question', 'low', 'none', false, 'error', null, null, null, 'demo'),\n  (now() - interval '30 minutes', 'chat', 'demo:32', null, null, null, 'Is the Tidepool cleanser good for oily skin?', 'question', 'low', 'none', false, 'answered', null, null, null, 'demo')\n  returning 1\n)\nselect (select count(*) from removed)::int as removed, (select count(*) from inserted)::int as inserted;",
+        "options": {}
+      }
+    },
+    {
+      "id": "841ab339-b196-4b5b-ac62-2b485c13d7a7",
+      "name": "Remove Demo Messages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        120
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Removes all demo messages. Real messages are not touched.\ndelete from support_messages where session_id like 'demo:%';",
+        "options": {}
+      },
+      "disabled": true
+    },
+    {
+      "id": "d5906722-b01d-4bef-96ac-42228526e02e",
+      "name": "Sticky – Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -500
+      ],
+      "parameters": {
+        "content": "## Saltgrove – Demo Data\nRun before recording. Both resets are safe to run again.\n- **Reset Demo Messages:** one made-up day (32 messages) in support_messages for the daily report. Every demo row has session_id 'demo:…' and execution_id 'demo'.\n- **Reset Demo Orders:** the 15 made-up orders, with tracking times counted back from now. SG-10237 and SG-10241 belong to the demo buyer, Jordan Ellis.\n\nTo remove the demo messages: enable \"Remove Demo Messages\", disable \"Reset Demo Messages\", run once.",
+        "color": 7,
+        "width": 600,
+        "height": 330
+      }
+    },
+    {
+      "id": "ead98254-9105-41d4-a7ee-2ba4280e3c9e",
+      "name": "Reset Demo Orders",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        260,
+        360
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {},
+        "query": "-- Demo orders for the support agent: 15 made-up orders, with times counted back from now.\n-- Run before recording so tracking times look fresh. Safe to run again.\n-- SG-10237 and SG-10241 belong to the demo buyer Jordan Ellis. On email, the sender's address\n-- is the customer's email for the order lookup: to test by email, replace jordan.ellis@example.com\n-- with the address you send test emails from.\ninsert into orders (\n  order_number, customer_name, customer_email, country, ordered_at, items,\n  order_total_usd, shipping_method, status, tracking_number,\n  last_tracking_event, last_tracking_at, delivered_at, is_refill_club\n) values\n('SG-10231', 'Emma Carter', 'emma.carter@example.com', 'US', now() - interval '9 days',\n 'Tidepool Gel Cleanser x1, Dew Drop Hydrating Serum x1',\n 56.00, 'USPS Ground Advantage', 'delivered', 'TEST-USPS-10231',\n 'Delivered, front door', now() - interval '4 days', now() - interval '4 days', false),\n\n('SG-10232', 'Liam Brooks', 'liam.brooks@example.com', 'US', now() - interval '3 days',\n 'Night Shift Retinal Serum x1',\n 53.95, 'USPS Ground Advantage', 'shipped', 'TEST-USPS-10232',\n 'In transit, departed USPS facility in Portland, OR', now() - interval '1 day', null, false),\n\n('SG-10233', 'Ava Thompson', 'ava.thompson@example.com', 'US', now() - interval '25 minutes',\n 'Barrier Balm Moisturizer x2',\n 64.00, 'USPS Ground Advantage', 'processing', null,\n null, null, null, false),\n\n('SG-10235', 'Noah Patel', 'noah.patel@example.com', 'US', now() - interval '12 days',\n 'Daily Shield Mineral Sunscreen SPF 40 x1, Dew Drop Hydrating Serum x1',\n 62.00, 'USPS Ground Advantage', 'shipped', 'TEST-USPS-10235',\n 'Accepted at USPS origin facility in Portland, OR', now() - interval '9 days', null, false),\n\n('SG-10236', 'Chloe Martin', 'chloe.martin@example.com', 'CA', now() - interval '14 days',\n 'Oat Cloud Cream Cleanser x1, Barrier Balm Moisturizer x1, Dew Drop Hydrating Serum x1',\n 88.00, 'Canada Standard (tracked)', 'delivered', 'TEST-CA-10236',\n 'Delivered', now() - interval '2 days', now() - interval '2 days', false),\n\n('SG-10237', 'Jordan Ellis', 'jordan.ellis@example.com', 'US', now() - interval '6 days',\n 'Weekend Glow Exfoliating Toner x1, Tidepool Gel Cleanser x1',\n 53.95, 'USPS Ground Advantage', 'delivered', 'TEST-USPS-10237',\n 'Delivered, mailbox', now() - interval '1 day', now() - interval '1 day', false),\n\n('SG-10238', 'Mia Rodriguez', 'mia.rodriguez@example.com', 'US', now() - interval '16 days',\n 'Night Shift Retinal Serum x1, Barrier Balm Moisturizer x1',\n 80.00, 'USPS Ground Advantage', 'delivered', 'TEST-USPS-10238',\n 'Delivered, front door', now() - interval '11 days', now() - interval '11 days', false),\n\n('SG-10239', 'Ethan Walker', 'ethan.walker@example.com', 'US', now() - interval '50 days',\n 'Dew Drop Hydrating Serum x1',\n 39.95, 'USPS Ground Advantage', 'delivered', 'TEST-USPS-10239',\n 'Delivered, mailbox', now() - interval '44 days', now() - interval '44 days', false),\n\n('SG-10240', 'Olivia Nguyen', 'olivia.nguyen@example.com', 'US', now() - interval '3 hours',\n 'Dew Drop Hydrating Serum x1, Daily Shield Mineral Sunscreen SPF 40 x1 (Refill Club, 15% off)',\n 52.70, 'USPS Ground Advantage', 'processing', null,\n null, null, null, true),\n\n('SG-10241', 'Jordan Ellis', 'jordan.ellis@example.com', 'US', now() - interval '2 days',\n 'Dew Drop Hydrating Serum x1, Barrier Balm Moisturizer x1',\n 66.00, 'USPS Ground Advantage', 'shipped', 'TEST-USPS-10241',\n 'In transit, arrived at USPS regional facility in Sacramento, CA', now() - interval '6 hours', null, false),\n\n('SG-10242', 'Lucas Kim', 'lucas.kim@example.com', 'US', now() - interval '1 day',\n 'Night Shift Retinal Serum x1',\n 62.95, 'UPS 2nd Day Air', 'shipped', 'TEST-UPS-10242',\n 'In transit, on the way', now() - interval '5 hours', null, false),\n\n('SG-10243', 'Sophia Davis', 'sophia.davis@example.com', 'US', now() - interval '5 days',\n 'The Starter Trio x1',\n 44.95, 'USPS Ground Advantage', 'cancelled', null,\n 'Order cancelled at customer request', now() - interval '5 days', null, false),\n\n('SG-10244', 'James Wilson', 'james.wilson@example.com', 'CA', now() - interval '30 days',\n 'Weekend Glow Exfoliating Toner x1',\n 38.95, 'Canada Standard (tracked)', 'refunded', 'TEST-CA-10244',\n 'Return received at warehouse, refund issued', now() - interval '2 days', now() - interval '21 days', false),\n\n('SG-10245', 'Isabella Lopez', 'isabella.lopez@example.com', 'US', now() - interval '5 days',\n 'Barrier Balm Moisturizer x1, Daily Shield Mineral Sunscreen SPF 40 x1',\n 60.00, 'USPS Ground Advantage', 'delivered', 'TEST-USPS-10245',\n 'Delivered, front porch', now() - interval '20 hours', now() - interval '20 hours', false),\n\n('SG-10246', 'Benjamin Hall', 'ben.hall@example.com', 'US', now() - interval '20 days',\n 'Night Shift Retinal Serum x1',\n 53.95, 'USPS Ground Advantage', 'delivered', 'TEST-USPS-10246',\n 'Delivered, mailbox', now() - interval '15 days', now() - interval '15 days', false)\non conflict (order_number) do update set\n  customer_name = excluded.customer_name,\n  customer_email = excluded.customer_email,\n  country = excluded.country,\n  ordered_at = excluded.ordered_at,\n  items = excluded.items,\n  order_total_usd = excluded.order_total_usd,\n  shipping_method = excluded.shipping_method,\n  status = excluded.status,\n  tracking_number = excluded.tracking_number,\n  last_tracking_event = excluded.last_tracking_event,\n  last_tracking_at = excluded.last_tracking_at,\n  delivered_at = excluded.delivered_at,\n  is_refill_club = excluded.is_refill_club\nreturning order_number, customer_name, customer_email, status, last_tracking_at;"
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run": {
+      "main": [
+        [
+          {
+            "node": "Reset Demo Messages",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Remove Demo Messages",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Reset Demo Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "tags": []
+}

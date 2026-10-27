@@ -1,0 +1,375 @@
+{
+  "name": "Saltgrove – Load Help Docs",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Workflow A – Load help documents\nSaltgrove Skin's help documents become the knowledge base the support agent answers from.\n\n**1. Upload** → **2. Replace old version** → **3. Split, embed, store** → **4. Confirm**\n\nRe-uploading a file with the same name replaces its old chunks, so the agent never answers from an outdated policy.",
+        "height": 180,
+        "width": 2000,
+        "color": 7
+      },
+      "id": "65d1e38d-82c0-4069-b225-9b6f6c874540",
+      "name": "Sticky Note – Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -540
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. Upload\nForm accepts .md and .txt files. Each file becomes one item.",
+        "height": 880,
+        "width": 460,
+        "color": 5
+      },
+      "id": "99eee052-6c72-4752-9eb6-7250b09f73fb",
+      "name": "Sticky Note – Upload",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2. Replace old version\nDeletes stored chunks whose file name matches an uploaded file.",
+        "height": 880,
+        "width": 460,
+        "color": 3
+      },
+      "id": "5204f286-4195-4577-89f9-6bfcb4bb5559",
+      "name": "Sticky Note – Replace",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        400,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3. Split, embed, store\nText split into ~800-character chunks, embedded with Gemini (gemini-embedding-001, 3072 dims), saved to Supabase `documents` with the file name in metadata.",
+        "height": 880,
+        "width": 560,
+        "color": 4
+      },
+      "id": "18739d6b-9d07-409a-8306-752e672e8301",
+      "name": "Sticky Note – Store",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        880,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 4. Confirm\nShows how many files and chunks were stored.",
+        "height": 880,
+        "width": 460,
+        "color": 6
+      },
+      "id": "e5741db6-8742-4696-b8f5-11cf51c999c1",
+      "name": "Sticky Note – Confirm",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1460,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "Saltgrove Skin – Update Help Documents",
+        "formDescription": "Upload the help documents the support assistant answers from (.md or .txt). A file with the same name as an existing one replaces the old version.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Help documents",
+              "fieldType": "file",
+              "acceptFileTypes": ".md, .txt",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "0f13cdb4-9b11-46e5-b0b3-b484511dc430",
+      "name": "Upload Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "486fc2db-944c-419a-9a44-bf52ae040c03"
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per uploaded file, with the binary renamed to `data`.\n// .md files are read as plain text so the loader does not reject the markdown MIME type.\nconst allowed = ['.md', '.txt'];\nconst out = [];\nconst skipped = [];\n\nfor (const item of $input.all()) {\n  const bin = item.binary || {};\n  for (const key of Object.keys(bin)) {\n    const file = bin[key];\n    const name = file.fileName || key;\n    const ext = name.slice(name.lastIndexOf('.')).toLowerCase();\n    if (!allowed.includes(ext)) {\n      skipped.push(name);\n      continue;\n    }\n    out.push({\n      json: {\n        file_name: name,\n        file_size: file.fileSize || null,\n        uploaded_at: $now.toISO(),\n      },\n      binary: {\n        data: { ...file, mimeType: 'text/plain' },\n      },\n    });\n  }\n}\n\nif (out.length === 0) {\n  throw new Error('No .md or .txt files were uploaded. Skipped: ' + (skipped.join(', ') || 'none'));\n}\n\nreturn out;"
+      },
+      "id": "bff39603-11ae-4375-878b-30b84a26b9f8",
+      "name": "Split Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "delete from documents\nwhere metadata->>'file_name' = any(string_to_array($1, '|'));",
+        "options": {
+          "queryReplacement": "={{ $input.all().map(i => i.json.file_name).join('|') }}"
+        }
+      },
+      "id": "a032701e-b4c4-4b11-98fe-ee92dd846a25",
+      "name": "Delete Old Chunks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        500,
+        0
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// The delete step returns one summary item, so bring back the uploaded files.\nreturn $('Split Files').all();"
+      },
+      "id": "9e46bb2b-cf70-4c11-a608-0d8af6ff67e1",
+      "name": "Restore Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list",
+          "cachedResultName": "documents"
+        },
+        "options": {
+          "queryName": "match_documents"
+        }
+      },
+      "id": "9e4d7851-9809-408f-a010-009b1df41190",
+      "name": "Supabase: Store Chunks",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1,
+      "position": [
+        980,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "7bc4e936-0bdb-40bc-9b83-21876ad65e36",
+      "name": "Gemini Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        960,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "binary",
+        "loader": "textLoader",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "file_name",
+                "value": "={{ $json.file_name }}"
+              },
+              {
+                "name": "uploaded_at",
+                "value": "={{ $json.uploaded_at }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "b5d40e9a-22e4-4e7a-afe8-e79d2ed9fe5c",
+      "name": "Load Text",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "chunkSize": 800,
+        "chunkOverlap": 120,
+        "options": {}
+      },
+      "id": "8935c0c7-240e-4a3c-b232-71ab01c80dcb",
+      "name": "Split Into Chunks",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Count what was stored, for the confirmation page.\nconst files = $('Split Files').all().map(i => i.json.file_name);\nreturn [{\n  json: {\n    files: files.length,\n    file_names: files.join(', '),\n    chunks: $input.all().length,\n  },\n}];"
+      },
+      "id": "10357f0e-4a90-4593-84bf-2b9aaefa3364",
+      "name": "Count Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "Help documents updated",
+        "completionMessage": "={{ $json.files }} {{ $json.files === 1 ? 'file' : 'files' }} processed into {{ $json.chunks }} searchable chunks: {{ $json.file_names }}",
+        "options": {}
+      },
+      "id": "ce77a91b-07cb-4fc5-8422-22882b3d795b",
+      "name": "Confirmation Page",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        0
+      ],
+      "webhookId": "f143f8df-0c6b-47d7-ac2c-2909da98138f"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Upload Form": {
+      "main": [
+        [
+          {
+            "node": "Split Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Files": {
+      "main": [
+        [
+          {
+            "node": "Delete Old Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Old Chunks": {
+      "main": [
+        [
+          {
+            "node": "Restore Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Files": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Store Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Store Chunks": {
+      "main": [
+        [
+          {
+            "node": "Count Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Results": {
+      "main": [
+        [
+          {
+            "node": "Confirmation Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Supabase: Store Chunks",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Text": {
+      "ai_document": [
+        [
+          {
+            "node": "Supabase: Store Chunks",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Into Chunks": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Load Text",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timezone": "America/Los_Angeles"
+  },
+  "tags": []
+}

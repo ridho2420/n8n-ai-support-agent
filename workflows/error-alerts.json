@@ -1,0 +1,102 @@
+{
+  "name": "Saltgrove – Error Alerts",
+  "nodes": [
+    {
+      "id": "a5f27694-f492-4c18-a572-7ece7ef73663",
+      "name": "When a Workflow Fails",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "7b2904e2-bfa7-49ab-80d1-9b3431be9452",
+      "name": "Format Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// One readable Slack message per failed run.\n// Works for failed executions and for trigger errors (for example an expired Gmail login).\nconst d = $input.first().json;\nconst wf = d.workflow || {};\nconst ex = d.execution || null;\nconst err = (ex && ex.error) || (d.trigger && d.trigger.error) || {};\nconst when = $now.setZone('America/Los_Angeles').toFormat('ccc, LLL d, h:mm a') + ' PT';\nconst nodeName = (ex && ex.lastNodeExecuted) || (err.node && err.node.name) || (d.trigger ? 'trigger' : 'unknown');\n\nconst lines = [\n  ':x: *' + (wf.name || 'A workflow') + '* stopped with an error (' + when + ').',\n  '*Node:* ' + nodeName,\n  '*Error:* ' + String(err.message || err.description || 'no message').slice(0, 300),\n];\nif (ex && ex.id) {\n  lines.push('*Execution:* ' + ex.id + (ex.url ? ' · <' + ex.url + '|open in n8n>' : ''));\n} else {\n  lines.push('The trigger itself failed, so no execution was saved. Check the trigger and its credential.');\n}\nif (/Support Agent/i.test(wf.name || '')) {\n  lines.push('If this run came from a customer email, the customer may not have received a reply. Check the support inbox.');\n}\nreturn [{ json: { text: lines.join('\\n') } }];"
+      }
+    },
+    {
+      "id": "abe4154b-af3a-4839-9776-d756b7be4bad",
+      "name": "Slack: #automation-errors",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_AUTOMATION_ERRORS_CHANNEL_ID",
+          "mode": "id"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "unfurl_links": false,
+          "unfurl_media": false
+        }
+      },
+      "webhookId": "7997d0d1-5903-48b0-95b7-922224141b0f"
+    },
+    {
+      "id": "c497bd67-0fdc-4dbe-b231-2b7683a6eed2",
+      "name": "Sticky – Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -240
+      ],
+      "parameters": {
+        "content": "## Saltgrove – Error Alerts\nRuns when a Saltgrove workflow stops with an error (set as the Error workflow in each workflow's settings). Posts one message to #automation-errors: which workflow, which node, the error, and the execution number.\n\nOnly automatic runs trigger it, not manual test runs.",
+        "color": 7,
+        "width": 760,
+        "height": 200
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When a Workflow Fails": {
+      "main": [
+        [
+          {
+            "node": "Format Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Alert": {
+      "main": [
+        [
+          {
+            "node": "Slack: #automation-errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "timezone": "America/Los_Angeles"
+  },
+  "tags": []
+}
