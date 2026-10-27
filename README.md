@@ -4,7 +4,7 @@ Answers customer emails and chat messages for a small online store, using the st
 
 > **Demo project.** Built for a fictional skincare store, *Saltgrove Skin*, and tested with fictional customers and orders. No real customer data was used.
 
-**Demo video (3 min):** [watch it on LinkedIn](https://lnkd.in/p/g44XUS-v)
+**Demo video (3 min):** [watch it on LinkedIn](https://lnkd.in/p/gS6QV-T3)
 
 ![Support agent workflow in n8n](images/workflow-canvas.jpg)
 
